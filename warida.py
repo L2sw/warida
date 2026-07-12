@@ -3,8 +3,7 @@ import gspread
 import json
 from oauth2client.service_account import ServiceAccountCredentials
 
-# ページ設定
-st.set_page_config(page_title="💰 WariDA", page_icon="💸")
+st.set_page_config(page_title="💰 WariDA Pro", page_icon="💸")
 
 def get_sheet():
     creds_dict = json.loads(st.secrets["gcp"]["data"])
@@ -13,11 +12,7 @@ def get_sheet():
     client = gspread.authorize(creds)
     return client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db")
 
-# セッション管理
-if 'my_entries' not in st.session_state:
-    st.session_state.my_entries = []
-
-st.markdown("<h1 style='text-align: center; color: #ff6b6b;'>💸 WariDA 💸</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #ff6b6b;'>💸 WariDA Pro 💸</h1>", unsafe_allow_html=True)
 
 try:
     sheet = get_sheet()
@@ -26,69 +21,45 @@ except Exception as e:
     st.error(f"接続エラー: {e}")
     st.stop()
 
-# --- 入力画面 ---
-st.subheader("📝 支払いを追加")
-col1, col2 = st.columns(2)
-with col1:
-    name = st.text_input("名前（重複不可）")
-with col2:
-    amount = st.number_input("金額 (整数のみ)", min_value=0, step=1, format="%d")
+# --- 入力 ---
+st.subheader("📝 会の支払いを追加")
+session_name = st.text_input("会の名前（例：1次会）")
+session_cost = st.number_input("合計金額", min_value=0, step=100)
+participants = st.text_input("参加者（カンマ区切りで入力：Aさん,Bさん,Cさん）")
 
-if st.button("🚀 送信！"):
-    existing_names = [d['名前'] for d in data]
-    if not name:
-        st.warning("名前を入力してね！")
-    elif name in existing_names:
-        st.error(f"「{name}」さんはすでに登録されています！")
-    else:
-        sheet.append_row([name, amount])
-        st.session_state.my_entries.append(name)
+if st.button("送信"):
+    if session_name and session_cost > 0 and participants:
+        sheet.append_row([session_name, session_cost, participants])
         st.balloons()
         st.rerun()
-
-st.divider()
-
-# --- データ管理と削除画面 ---
-st.subheader("📊 みんなの支払い")
-if not data:
-    st.info("まだ記録はないよ！")
-else:
-    for i, d in enumerate(data):
-        col1, col2, col3 = st.columns([2, 1, 1])
-        col1.write(f"👤 {d['名前']}")
-        col2.write(f"💰 {d['金額']}円")
-        
-        if d['名前'] in st.session_state.my_entries:
-            if col3.button("❌ 消す", key=f"del_{i}"):
-                sheet.delete_rows(i + 2)
-                st.rerun()
-        else:
-            col3.caption("他人")
-
-st.divider()
-
-# --- 計算画面 ---
-if st.button("🧮 計算！"):
-    if not data:
-        st.warning("データがないよ！")
     else:
-        total = sum(d['金額'] for d in data)
-        avg = total / len(data)
-        st.write(f"### 合計: {total}円 / 1人: {avg:.0f}円")
-        for d in data:
-            diff = d['金額'] - avg
-            if diff < 0:
-                st.error(f"😢 {d['名前']}さん：あと {abs(diff):.0f} 円")
-            else:
-                st.info(f"✨ {d['名前']}さん： {diff:.0f} 円受け取る")
+        st.warning("すべて入力してください。")
 
-# --- リセットボタン（一番下に配置） ---
 st.divider()
-with st.expander("⚠️ 全データをリセットする"):
-    st.warning("この操作はみんなの入力が全部消えます。いいですか？")
-    if st.button("🚨 全データリセット"):
-        # 1行目のヘッダーを残して2行目以降をすべて削除
+
+# --- 計算ロジック ---
+st.subheader("🧮 誰がいくら払うべき？")
+if data:
+    # 負担額の集計用辞書
+    debts = {}
+    
+    for row in data:
+        cost = int(row['金額'])
+        names = [n.strip() for n in row['参加者'].split(',')]
+        per_person = cost / len(names)
+        
+        for name in names:
+            debts[name] = debts.get(name, 0) + per_person
+            
+    # 結果表示
+    st.write("### 参加者ごとの総負担額")
+    for name, amount in debts.items():
+        st.write(f"👤 {name}：{amount:.0f}円")
+else:
+    st.info("まだデータがありません。")
+
+# --- リセット ---
+with st.expander("⚠️ 全データをリセット"):
+    if st.button("本当に消す"):
         sheet.delete_rows(2, len(data) + 1)
-        st.session_state.my_entries = [] # 自分の履歴もクリア
-        st.success("リセット完了！")
         st.rerun()
