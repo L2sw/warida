@@ -5,7 +5,6 @@ import json
 import os
 from google.oauth2.service_account import Credentials
 
-# --- 認証関数：改行コードを強制的に修正する ---
 def get_client():
     key_path = "service-account.json"
     if not os.path.exists(key_path):
@@ -13,21 +12,20 @@ def get_client():
         st.stop()
     
     with open(key_path, "r") as f:
-        # 一度辞書として読み込む
         creds_dict = json.load(f)
         
-        # 【重要】private_keyの改行コードが壊れている場合、これを修復する
-        if "\\n" not in creds_dict["private_key"] and "\n" not in creds_dict["private_key"]:
-            # もし改行が全くないなら、base64でエンコードされている可能性があるため
-            # ここでは標準的な形式へ整形を試みる
-            pass 
+    # --- 【重要】ここで秘密鍵の改行を強制的に修復 ---
+    # 改行がJSON上でエスケープされている場合と、生の改行になっている場合の双方に対応
+    raw_key = creds_dict["private_key"]
+    if "\\n" in raw_key:
+        creds_dict["private_key"] = raw_key.replace("\\n", "\n")
+    # ---------------------------------------------
 
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    # 読み込んだ辞書をそのまま使用
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds)
 
-# --- データ読み込み ---
+# --- 以下は前回と同じです ---
 @st.cache_data(ttl=5)
 def load_data():
     try:
@@ -44,7 +42,6 @@ def load_data():
         st.error(f"スプレッドシート接続エラー: {e}")
         return pd.DataFrame(columns=['会', '支払者', '金額'])
 
-# --- UI構築 ---
 st.set_page_config(page_title="WariDA", layout="wide")
 st.title("💸 WariDA Pro")
 
@@ -52,9 +49,8 @@ if 'my_name' not in st.session_state:
     st.session_state.my_name = None
 
 if not st.session_state.my_name:
-    st.session_state.my_name = st.text_input("あなたの名前（4文字以内）")
-    if st.button("確定"):
-        st.rerun()
+    st.session_state.my_name = st.text_input("あなたの名前")
+    if st.button("確定"): st.rerun()
 else:
     st.write(f"ログイン中: **{st.session_state.my_name}** さん")
     session = st.selectbox("会を選択", ["1次会", "2次会", "3次会", "4次会", "5次会"])
@@ -74,7 +70,6 @@ st.subheader("📋 支払い履歴")
 df = load_data()
 st.dataframe(df, use_container_width=True)
 
-# 削除処理
 for i, row in df.iterrows():
     if row['支払者'] == st.session_state.my_name:
         if st.button(f"❌ 削除 ({row['会']} | {row['金額']}円)", key=f"del_{i}"):
