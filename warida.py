@@ -5,8 +5,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # 1. Googleスプレッドシートへの接続設定（Secretsを使用）
 def get_sheet():
-    # StreamlitのSecretsから認証情報を取得
-    creds_dict = json.loads(st.secrets["gcp"]["key"])
+    # StreamlitのSecrets設定から JSON文字列を読み込み、辞書に変換
+    creds_dict = json.loads(st.secrets["gcp_service_account"])
     
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -18,8 +18,6 @@ def get_sheet():
     client = gspread.authorize(creds)
     
     # ★あなたのスプレッドシートのIDをここにコピペしてください
-    # URLが https://docs.google.com/spreadsheets/d/abc123456789/edit なら
-    # IDは 'abc123456789' です
     spreadsheet_key = "あなたのスプレッドシートIDをここに貼り付け"
     
     return client.open_by_key(spreadsheet_key).sheet1
@@ -27,7 +25,7 @@ def get_sheet():
 # アプリのタイトル
 st.title("💰 みんなの割り勘アプリ")
 
-# シートの取得（エラーハンドリング付き）
+# シートの取得
 try:
     sheet = get_sheet()
 except Exception as e:
