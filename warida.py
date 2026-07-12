@@ -1,13 +1,14 @@
 import streamlit as st
 import gspread
 import pandas as pd
+import base64
 from google.oauth2.service_account import Credentials
 
 def get_client():
-    # Secretsから直接辞書を作成
+    # Secretsから辞書を取得
     creds_dict = dict(st.secrets["gcp"])
-    # 改行を確実に復元
-    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    # 秘密鍵をBase64から復元
+    creds_dict["private_key"] = base64.b64decode(creds_dict["private_key"]).decode('utf-8')
     
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
