@@ -15,7 +15,7 @@ def load_data():
     creds_dict = json.loads(secret_data) if isinstance(secret_data, str) else secret_data
     
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    creds_dict = json.loads(st.secrets["gcp"]["data"])
     client = gspread.authorize(creds)
     sheet = client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db")
     
