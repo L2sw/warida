@@ -4,7 +4,7 @@ import json
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ページ設定
-st.set_page_config(page_title="💰 割り勘キャッチャー", page_icon="💸")
+st.set_page_config(page_title="💰 WariDA", page_icon="💸")
 
 def get_sheet():
     creds_dict = json.loads(st.secrets["gcp"]["data"])
@@ -17,7 +17,7 @@ def get_sheet():
 if 'my_entries' not in st.session_state:
     st.session_state.my_entries = []
 
-st.markdown("<h1 style='text-align: center; color: #ff6b6b;'>💸 割り勘キャッチャー 💸</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #ff6b6b;'>💸 WariDA 💸</h1>", unsafe_allow_html=True)
 
 try:
     sheet = get_sheet()
@@ -35,7 +35,7 @@ with col2:
     # step=1で整数のみ、min_valueで0以上を強制
     amount = st.number_input("金額 (整数のみ)", min_value=0, step=1, format="%d")
 
-if st.button("🚀 送信して記録！"):
+if st.button("🚀 送信！"):
     # エラーチェック
     existing_names = [d['名前'] for d in data]
     if not name:
@@ -51,7 +51,7 @@ if st.button("🚀 送信して記録！"):
 st.divider()
 
 # --- データ管理と削除画面 ---
-st.subheader("📊 記録一覧")
+st.subheader("📊 みんなの支払い")
 if not data:
     st.info("まだ記録はないよ！")
 else:
@@ -71,7 +71,7 @@ else:
 st.divider()
 
 # --- 計算画面 ---
-if st.button("🧮 割り勘計算！"):
+if st.button("🧮 計算！"):
     if not data:
         st.warning("データがないよ！")
     else:
