@@ -2,8 +2,9 @@ import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
+# Googleスプレッドシートへの接続設定
 def get_sheet():
-    # Secretsから個別に読み込む
+    # Secretsから個別に文字列を読み込み、辞書を作成
     creds_dict = {
         "type": st.secrets["gcp"]["type"],
         "project_id": st.secrets["gcp"]["project_id"],
@@ -26,10 +27,11 @@ def get_sheet():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     
-    # ★IDを直接指定
-    spreadsheet_key = "あなたのスプレッドシートIDをここに貼り付け"
+    # IDを直接指定（ここにあなたのスプレッドシートIDを貼り付け）
+    spreadsheet_key = "ここにあなたのスプレッドシートIDを貼り付け"
     return client.open_by_key(spreadsheet_key).sheet1
 
+# アプリのタイトル
 st.title("💰 みんなの割り勘アプリ")
 
 try:
@@ -38,7 +40,7 @@ except Exception as e:
     st.error(f"接続エラー: {e}")
     st.stop()
 
-# --- 以降は変更なし ---
+# フォーム
 name = st.text_input("名前")
 amount = st.number_input("支払った金額", min_value=0)
 
