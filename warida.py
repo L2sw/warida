@@ -26,14 +26,18 @@ def load_data():
         st.error(f"スプレッドシート接続エラー: {e}")
         return pd.DataFrame(columns=['会', '支払者', '金額'])
 
-# --- 清算アルゴリズム ---
-def calculate_settlement(df):
-    total_amount = df['金額'].sum()
-    num_people = df['支払者'].nunique()
+# --- 全会合算の清算アルゴリズム ---
+def calculate_total_settlement(df):
+    # 全員の支払額を合算
+    total_paid_by_person = df.groupby('支払者')['金額'].sum()
+    total_sum = total_paid_by_person.sum()
+    num_people = total_paid_by_person.nunique()
+    
     if num_people <= 1: return []
     
-    avg_amount = total_amount / num_people
-    balances = df.groupby('支払者')['金額'].sum() - avg_amount
+    # 一人当たりの負担額を算出
+    avg_amount = total_sum / num_people
+    balances = total_paid_by_person - avg_amount
     
     debtors = balances[balances < 0].sort_values()
     creditors = balances[balances > 0].sort_values(ascending=False)
@@ -45,7 +49,7 @@ def calculate_settlement(df):
         creditor, c_val = creditors.index[c_idx], creditors.iloc[c_idx]
         
         amount = min(d_val, c_val)
-        if amount > 0.1: # 誤差対策
+        if amount > 0.1:
             results.append({"支払人": debtor, "受取人": creditor, "金額": int(amount)})
         
         debtors.iloc[d_idx] += amount
@@ -76,41 +80,27 @@ else:
         st.rerun()
 
 st.divider()
-st.subheader("📋 支払い状況と清算結果")
 df = load_data()
+
+# 1. 会ごとの内訳表示
+st.subheader("📋 会ごとの支払い内訳")
 sessions = ["1次会", "2次会", "3次会", "4次会", "5次会"]
 tabs = st.tabs(sessions)
-
 for i, s_name in enumerate(sessions):
     with tabs[i]:
         filtered_df = df[df['会'] == s_name]
-        summary_df = filtered_df.groupby('支払者')['金額'].sum().reset_index()
-        
-        if not summary_df.empty:
-            st.write(f"**{s_name} 支払い合計**")
-            st.table(summary_df)
-            
-            # 清算結果の表示
-            st.write(f"**💰 {s_name} 清算結果**")
-            settlements = calculate_settlement(filtered_df)
-            if settlements:
-                settle_df = pd.DataFrame(settlements)
-                st.table(settle_df)
-            else:
-                st.write("過不足なし！")
-            
-            st.write("---")
-            # 自分の削除ボタン
-            for idx, row in summary_df.iterrows():
-                if row['支払者'] == st.session_state.my_name:
-                    if st.button(f"❌ {row['支払者']} の {s_name} 記録をリセット", key=f"del_{s_name}"):
-                        client = get_client()
-                        sheet = client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db")
-                        all_rows = sheet.get_all_values()
-                        new_rows = [r for r in all_rows if not (r[0] == s_name and r[1] == st.session_state.my_name)]
-                        sheet.clear()
-                        sheet.update(all_rows[0:1] + new_rows)
-                        st.cache_data.clear()
-                        st.rerun()
-        else:
-            st.info("まだ履歴がありません")
+        summary = filtered_df.groupby('支払者')['金額'].sum().reset_index()
+        if not summary.empty: st.table(summary)
+        else: st.info("この会の履歴はありません")
+
+# 2. 全会合算の清算結果
+st.divider()
+st.subheader("💰 全会合計の清算結果")
+if not df.empty:
+    settlements = calculate_total_settlement(df)
+    if settlements:
+        st.table(pd.DataFrame(settlements))
+    else:
+        st.success("全員の支払い金額が均等です（清算不要）")
+else:
+    st.write("データがありません")
