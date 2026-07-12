@@ -13,7 +13,7 @@ def get_sheet():
     client = gspread.authorize(creds)
     return client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db")
 
-# セッション管理：自分が送信した記録のキーをブラウザごとに保存
+# セッション管理
 if 'my_entries' not in st.session_state:
     st.session_state.my_entries = []
 
@@ -32,11 +32,9 @@ col1, col2 = st.columns(2)
 with col1:
     name = st.text_input("名前（重複不可）")
 with col2:
-    # step=1で整数のみ、min_valueで0以上を強制
     amount = st.number_input("金額 (整数のみ)", min_value=0, step=1, format="%d")
 
 if st.button("🚀 送信！"):
-    # エラーチェック
     existing_names = [d['名前'] for d in data]
     if not name:
         st.warning("名前を入力してね！")
@@ -44,7 +42,7 @@ if st.button("🚀 送信！"):
         st.error(f"「{name}」さんはすでに登録されています！")
     else:
         sheet.append_row([name, amount])
-        st.session_state.my_entries.append(name) # 自分の記録として保存
+        st.session_state.my_entries.append(name)
         st.balloons()
         st.rerun()
 
@@ -60,7 +58,6 @@ else:
         col1.write(f"👤 {d['名前']}")
         col2.write(f"💰 {d['金額']}円")
         
-        # 削除ボタン：自分の記録、または自分が送信した記録なら表示（または管理者権限）
         if d['名前'] in st.session_state.my_entries:
             if col3.button("❌ 消す", key=f"del_{i}"):
                 sheet.delete_rows(i + 2)
@@ -84,3 +81,14 @@ if st.button("🧮 計算！"):
                 st.error(f"😢 {d['名前']}さん：あと {abs(diff):.0f} 円")
             else:
                 st.info(f"✨ {d['名前']}さん： {diff:.0f} 円受け取る")
+
+# --- リセットボタン（一番下に配置） ---
+st.divider()
+with st.expander("⚠️ 全データをリセットする"):
+    st.warning("この操作を行うと、スプレッドシートの全ての記録が消えます。本当にいいですか？")
+    if st.button("🚨 全データを削除してリセット"):
+        # 1行目のヘッダーを残して2行目以降をすべて削除
+        sheet.delete_rows(2, len(data) + 1)
+        st.session_state.my_entries = [] # 自分の履歴もクリア
+        st.success("リセット完了！")
+        st.rerun()
