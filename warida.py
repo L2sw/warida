@@ -85,8 +85,8 @@ if st.button("🧮 計算！"):
 # --- リセットボタン（一番下に配置） ---
 st.divider()
 with st.expander("⚠️ 全データをリセットする"):
-    st.warning("この操作を行うと、スプレッドシートの全ての記録が消えます。本当にいいですか？")
-    if st.button("🚨 全データを削除してリセット"):
+    st.warning("この操作はみんなの入力が全部消えます。いいですか？")
+    if st.button("🚨 全データリセット"):
         # 1行目のヘッダーを残して2行目以降をすべて削除
         sheet.delete_rows(2, len(data) + 1)
         st.session_state.my_entries = [] # 自分の履歴もクリア
