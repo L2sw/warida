@@ -2,26 +2,25 @@ import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# Googleスプレッドシートへの接続設定
 def get_sheet():
-    # Secretsから個別に文字列を読み込み、辞書を作成
+    # .strip() を使って、文字列の周囲にある不要な空白や制御文字を確実に削除します
     creds_dict = {
-        "type": st.secrets["gcp"]["type"],
-        "project_id": st.secrets["gcp"]["project_id"],
-        "private_key_id": st.secrets["gcp"]["private_key_id"],
-        "private_key": st.secrets["gcp"]["private_key"],
-        "client_email": st.secrets["gcp"]["client_email"],
-        "client_id": st.secrets["gcp"]["client_id"],
-        "auth_uri": st.secrets["gcp"]["auth_uri"],
-        "token_uri": st.secrets["gcp"]["token_uri"],
-        "auth_provider_x509_cert_url": st.secrets["gcp"]["auth_provider_x509_cert_url"],
-        "client_x509_cert_url": st.secrets["gcp"]["client_x509_cert_url"],
+        "type": st.secrets["gcp"]["type"].strip(),
+        "project_id": st.secrets["gcp"]["project_id"].strip(),
+        "private_key_id": st.secrets["gcp"]["private_key_id"].strip(),
+        "private_key": st.secrets["gcp"]["private_key"].strip(),
+        "client_email": st.secrets["gcp"]["client_email"].strip(),
+        "client_id": st.secrets["gcp"]["client_id"].strip(),
+        "auth_uri": st.secrets["gcp"]["auth_uri"].strip(),
+        "token_uri": st.secrets["gcp"]["token_uri"].strip(),
+        "auth_provider_x509_cert_url": st.secrets["gcp"]["auth_provider_x509_cert_url"].strip(),
+        "client_x509_cert_url": st.secrets["gcp"]["client_x509_cert_url"].strip(),
     }
     
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/spreadsheets"
+        "https://www.googleapis.com/auth/sheets"
     ]
     
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -31,7 +30,6 @@ def get_sheet():
     spreadsheet_key = "ここにあなたのスプレッドシートIDを貼り付け"
     return client.open_by_key(spreadsheet_key).sheet1
 
-# アプリのタイトル
 st.title("💰 みんなの割り勘アプリ")
 
 try:
@@ -40,7 +38,6 @@ except Exception as e:
     st.error(f"接続エラー: {e}")
     st.stop()
 
-# フォーム
 name = st.text_input("名前")
 amount = st.number_input("支払った金額", min_value=0)
 
