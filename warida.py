@@ -27,7 +27,7 @@ def get_sheet():
     client = gspread.authorize(creds)
     
     # IDを直接指定（ここにあなたのスプレッドシートIDを貼り付け）
-    spreadsheet_key = "ここにあなたのスプレッドシートIDを貼り付け"
+    spreadsheet_key = "1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw"
     return client.open_by_key(spreadsheet_key).sheet1
 
 st.title("💰 みんなの割り勘アプリ")
