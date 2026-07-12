@@ -43,7 +43,7 @@ except Exception as e:
 
 # 以降は変更なし
 name = st.text_input("名前")
-amount = st.number_input("支払った金額", min_value=0)
+amount = st.number_input("金額", min_value=0)
 
 if st.button("送信"):
     if name:
