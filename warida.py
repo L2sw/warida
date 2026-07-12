@@ -4,15 +4,14 @@ import json
 import pandas as pd
 from google.oauth2.service_account import Credentials
 
-# --- 認証処理を一つに集約 ---
+# --- 認証処理 ---
 def get_client():
-    # SecretsからJSONをロード
+    # Secretsから文字列を読み込み、JSONとして解釈する
+    # json.loadsを使うと、文字列中の "\\n" が正しく "\n" (改行コード) に変換されます
     creds_dict = json.loads(st.secrets["gcp"]["data"])
     
-    # 秘密鍵の改行を正しく復元
-    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-    
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    # 変換済みの辞書をそのまま渡す（ここでの余計な加工は一切不要です）
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds)
 
@@ -29,7 +28,7 @@ def load_data():
         df = pd.DataFrame(columns=['会', '支払者', '金額'])
     return df
 
-# --- UI構築 ---
+# --- アプリ本体 ---
 st.set_page_config(page_title="WariDA", layout="wide")
 st.title("💸 WariDA Pro")
 
@@ -57,7 +56,6 @@ st.subheader("📋 支払い履歴")
 df = load_data()
 st.dataframe(df, use_container_width=True)
 
-# 削除処理
 for i, row in df.iterrows():
     if row['支払者'] == st.session_state.my_name:
         if st.button(f"❌ 削除 ({row['会']} | {row['金額']}円)", key=f"del_{i}"):
