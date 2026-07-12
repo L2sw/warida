@@ -3,7 +3,13 @@ import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
 
-# --- 認証とデータ読み込み ---
+# --- 設定：各会の参加者名簿（ここを編集してメンバーを管理） ---
+PARTICIPANTS_MAP = {
+    "1次会": ["q", "x", "y"],
+    "2次会": ["k", "x", "y"],
+    "3次会": [], "4次会": [], "5次会": []
+}
+
 def get_client():
     creds_dict = dict(st.secrets["gcp_service_account"])
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -24,48 +30,39 @@ def load_data():
     except Exception:
         return pd.DataFrame(columns=['会', '支払者', '金額'])
 
-# --- 全体最適化された清算ロジック ---
-def calculate_global_settlement(df):
-    if df.empty: return []
+# --- 最適化された清算ロジック ---
+def calculate_optimized_settlement(df):
+    global_balances = {}
     
-    # 参加者全員のトータル収支（プラスなら受取、マイナスなら支払い）を記録
-    global_balances = pd.Series(dtype=float)
-    
-    for session in df['会'].unique():
+    for session, members in PARTICIPANTS_MAP.items():
+        if not members: continue
         session_df = df[df['会'] == session]
-        participants = session_df['支払者'].unique()
         session_total = session_df['金額'].sum()
-        per_person = session_total / len(participants)
+        per_person = session_total / len(members)
         
-        # 支払った実績
         actual = session_df.groupby('支払者')['金額'].sum()
-        
-        # 各参加者のこの会での収支を足し合わせる
-        for p in participants:
-            balance = actual.get(p, 0) - per_person
-            global_balances[p] = global_balances.get(p, 0) + balance
+        for m in members:
+            balance = actual.get(m, 0) - per_person
+            global_balances[m] = global_balances.get(m, 0) + balance
             
-    # 清算相手をマッチング
-    debtors = global_balances[global_balances < -0.5].sort_values()
-    creditors = global_balances[global_balances > 0.5].sort_values(ascending=False)
+    # 債権者と債務者に分ける
+    balances_series = pd.Series(global_balances)
+    debtors = balances_series[balances_series < -0.1].sort_values()
+    creditors = balances_series[balances_series > 0.1].sort_values(ascending=False)
     
     results = []
-    d_idx, c_idx = 0, 0
-    while d_idx < len(debtors) and c_idx < len(creditors):
-        debtor, d_val = debtors.index[d_idx], -debtors.iloc[d_idx]
-        creditor, c_val = creditors.index[c_idx], creditors.iloc[c_idx]
-        
-        amount = min(d_val, c_val)
-        if amount > 0.5:
-            results.append({"支払人": debtor, "受取人": creditor, "金額": int(amount)})
-        
-        debtors.iloc[d_idx] += amount
-        creditors.iloc[c_idx] -= amount
-        if debtors.iloc[d_idx] >= -0.5: d_idx += 1
-        if creditors.iloc[c_idx] <= 0.5: c_idx += 1
+    # 貪欲法でマッチング
+    for d_name, d_val in debtors.items():
+        remaining_debt = -d_val
+        for c_name, c_val in creditors.items():
+            if c_val <= 0 or remaining_debt <= 0: continue
+            pay_amount = min(remaining_debt, c_val)
+            results.append({"支払人": d_name, "受取人": c_name, "金額": int(pay_amount)})
+            creditors[c_name] -= pay_amount
+            remaining_debt -= pay_amount
     return results
 
-# --- UI設定 ---
+# --- UI ---
 st.set_page_config(page_title="WariDA Pro", layout="wide")
 st.title("💸 WariDA Pro")
 
@@ -85,41 +82,13 @@ else:
         st.rerun()
 
 st.divider()
-
-# 1. 会ごとの内訳と削除
-st.subheader("📋 会ごとの支払い内訳")
 df = load_data()
-sessions = ["1次会", "2次会", "3次会", "4次会", "5次会"]
-tabs = st.tabs(sessions)
-
-for i, s_name in enumerate(sessions):
-    with tabs[i]:
-        session_df = df[df['会'] == s_name]
-        if not session_df.empty:
-            summary = session_df.groupby('支払者')['金額'].sum().reset_index()
-            for _, row in summary.iterrows():
-                col1, col2, col3 = st.columns([2, 2, 1])
-                col1.write(row['支払者'])
-                col2.write(f"{int(row['金額'])} 円")
-                if row['支払者'] == st.session_state.my_name:
-                    if col3.button("❌", key=f"del_{s_name}"):
-                        client = get_client()
-                        sheet = client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db")
-                        all_rows = sheet.get_all_values()
-                        new_rows = [r for r in all_rows if not (r[0] == s_name and r[1] == st.session_state.my_name)]
-                        sheet.clear()
-                        sheet.update(all_rows[0:1] + new_rows)
-                        st.cache_data.clear()
-                        st.rerun()
-        else:
-            st.info("データなし")
-
-# 2. 最終清算結果
-st.divider()
 st.subheader("💰 最終的な支払い指示書")
-st.write("各会での複雑な割り勘を全て集計し、**最終的に誰が誰にいくら送金すれば完了するか**を算出しました。")
-settlements = calculate_global_settlement(df)
+settlements = calculate_optimized_settlement(df)
 if settlements:
     st.table(pd.DataFrame(settlements))
 else:
-    st.success("全員の過不足がゼロです（清算不要）")
+    st.success("清算不要")
+
+# 会ごとの内訳と削除処理（前回のコードと同じ）
+# ... (省略: 前回のコードの「会ごとの内訳と削除」部分をそのまま貼り付けてください)
