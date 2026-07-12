@@ -4,18 +4,15 @@ import json
 import pandas as pd
 from google.oauth2.service_account import Credentials
 
-# --- 認証処理 ---
+# --- 認証関数：ここが鍵 ---
 def get_client():
-    # Secretsから文字列を読み込み、JSONとして解釈する
-    # json.loadsを使うと、文字列中の "\\n" が正しく "\n" (改行コード) に変換されます
     creds_dict = json.loads(st.secrets["gcp"]["data"])
+    # 強制的に正しい改行コードに再変換して格納
+    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
     
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    # 変換済みの辞書をそのまま渡す（ここでの余計な加工は一切不要です）
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    return gspread.authorize(creds)
+    return gspread.authorize(Credentials.from_service_account_info(creds_dict, scopes=scopes))
 
-# --- データ読み込み ---
 @st.cache_data(ttl=5)
 def load_data():
     client = get_client()
@@ -28,23 +25,18 @@ def load_data():
         df = pd.DataFrame(columns=['会', '支払者', '金額'])
     return df
 
-# --- アプリ本体 ---
 st.set_page_config(page_title="WariDA", layout="wide")
 st.title("💸 WariDA Pro")
 
-if 'my_name' not in st.session_state:
-    st.session_state.my_name = None
+if 'my_name' not in st.session_state: st.session_state.my_name = None
 
 if not st.session_state.my_name:
-    name_input = st.text_input("あなたの名前（4文字以内）")
-    if st.button("確定"):
-        st.session_state.my_name = name_input
-        st.rerun()
+    st.session_state.my_name = st.text_input("名前")
+    if st.button("確定"): st.rerun()
 else:
-    st.write(f"ログイン中: **{st.session_state.my_name}** さん")
-    session = st.selectbox("会を選択", ["1次会", "2次会", "3次会", "4次会", "5次会"])
+    st.write(f"ログイン中: {st.session_state.my_name}")
+    session = st.selectbox("会", ["1次会", "2次会", "3次会", "4次会", "5次会"])
     amount = st.number_input("金額", min_value=0, step=100)
-    
     if st.button("送信"):
         client = get_client()
         client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db").append_row([session, st.session_state.my_name, amount])
@@ -52,8 +44,8 @@ else:
         st.rerun()
 
 st.divider()
-st.subheader("📋 支払い履歴")
 df = load_data()
+st.subheader("📋 履歴")
 st.dataframe(df, use_container_width=True)
 
 for i, row in df.iterrows():
