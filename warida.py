@@ -1,18 +1,13 @@
 import streamlit as st
 import gspread
-import json
-import base64
 import pandas as pd
 from google.oauth2.service_account import Credentials
 
 def get_client():
-    # 1. JSONを読み込む
-    creds_dict = json.loads(st.secrets["gcp"]["data"])
-    
-    # 2. Base64文字列をデコードして秘密鍵を復元
-    # 既存の private_key が Base64化されていると仮定してデコード
-    decoded_key = base64.b64decode(creds_dict["private_key"]).decode('utf-8')
-    creds_dict["private_key"] = decoded_key
+    # Secretsから直接辞書を作成
+    creds_dict = dict(st.secrets["gcp"])
+    # 改行を確実に復元
+    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
     
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
@@ -36,12 +31,11 @@ st.title("💸 WariDA Pro")
 if 'my_name' not in st.session_state: st.session_state.my_name = None
 
 if not st.session_state.my_name:
-    name_input = st.text_input("あなたの名前")
-    if st.button("確定"):
-        st.session_state.my_name = name_input
-        st.rerun()
+    st.session_state.my_name = st.text_input("名前")
+    if st.button("確定"): st.rerun()
 else:
-    session = st.selectbox("会を選択", ["1次会", "2次会", "3次会", "4次会", "5次会"])
+    st.write(f"ログイン中: {st.session_state.my_name}")
+    session = st.selectbox("会", ["1次会", "2次会", "3次会", "4次会", "5次会"])
     amount = st.number_input("金額", min_value=0, step=100)
     if st.button("送信"):
         client = get_client()
@@ -51,6 +45,7 @@ else:
 
 st.divider()
 df = load_data()
+st.subheader("📋 履歴")
 st.dataframe(df, use_container_width=True)
 
 for i, row in df.iterrows():
