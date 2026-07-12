@@ -1,31 +1,19 @@
 import streamlit as st
 import gspread
 import pandas as pd
-import json
-import os
 from google.oauth2.service_account import Credentials
 
+# --- 認証クライアントの取得（Secrets使用） ---
 def get_client():
-    key_path = "service-account.json"
-    if not os.path.exists(key_path):
-        st.error(f"ファイル {key_path} が見つかりません。")
-        st.stop()
+    # StreamlitのSecretsから認証情報を辞書として取得
+    # .streamlit/secrets.toml または CloudのSecrets設定から読み込まれます
+    creds_dict = dict(st.secrets["gcp_service_account"])
     
-    with open(key_path, "r") as f:
-        creds_dict = json.load(f)
-        
-    # --- 【重要】ここで秘密鍵の改行を強制的に修復 ---
-    # 改行がJSON上でエスケープされている場合と、生の改行になっている場合の双方に対応
-    raw_key = creds_dict["private_key"]
-    if "\\n" in raw_key:
-        creds_dict["private_key"] = raw_key.replace("\\n", "\n")
-    # ---------------------------------------------
-
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds)
 
-# --- 以下は前回と同じです ---
+# --- データの読み込み ---
 @st.cache_data(ttl=5)
 def load_data():
     try:
@@ -42,6 +30,7 @@ def load_data():
         st.error(f"スプレッドシート接続エラー: {e}")
         return pd.DataFrame(columns=['会', '支払者', '金額'])
 
+# --- UI設定 ---
 st.set_page_config(page_title="WariDA", layout="wide")
 st.title("💸 WariDA Pro")
 
@@ -70,11 +59,13 @@ st.subheader("📋 支払い履歴")
 df = load_data()
 st.dataframe(df, use_container_width=True)
 
+# --- 削除処理 ---
 for i, row in df.iterrows():
     if row['支払者'] == st.session_state.my_name:
         if st.button(f"❌ 削除 ({row['会']} | {row['金額']}円)", key=f"del_{i}"):
             try:
                 client = get_client()
+                # iは0から始まるため、ヘッダー分(+1)を考慮して+2
                 client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db").delete_rows(i + 2)
                 st.cache_data.clear()
                 st.rerun()
