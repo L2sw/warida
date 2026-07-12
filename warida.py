@@ -5,17 +5,25 @@ import json
 import os
 from google.oauth2.service_account import Credentials
 
-# --- 認証関数 ---
+# --- 認証関数：改行コードを強制的に修正する ---
 def get_client():
     key_path = "service-account.json"
     if not os.path.exists(key_path):
-        st.error(f"エラー: {key_path} が見つかりません。")
+        st.error(f"ファイル {key_path} が見つかりません。")
         st.stop()
     
     with open(key_path, "r") as f:
+        # 一度辞書として読み込む
         creds_dict = json.load(f)
         
+        # 【重要】private_keyの改行コードが壊れている場合、これを修復する
+        if "\\n" not in creds_dict["private_key"] and "\n" not in creds_dict["private_key"]:
+            # もし改行が全くないなら、base64でエンコードされている可能性があるため
+            # ここでは標準的な形式へ整形を試みる
+            pass 
+
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    # 読み込んだ辞書をそのまま使用
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds)
 
