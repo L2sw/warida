@@ -2,11 +2,21 @@ import streamlit as st
 import gspread
 import pandas as pd
 import json
+import os
 from google.oauth2.service_account import Credentials
 
-# --- 認証関数：アップロードされたファイルから認証 ---
-def get_client(json_data):
-    creds_dict = json.load(json_data)
+# --- 認証関数：リポジトリ内のファイルを直接読み込む ---
+def get_client():
+    # リポジトリ内のファイルを直接指定
+    key_path = "service-account.json"
+    
+    if not os.path.exists(key_path):
+        st.error(f"ファイル {key_path} が見つかりません。リポジトリのルートに配置してください。")
+        st.stop()
+        
+    with open(key_path, "r") as f:
+        creds_dict = json.load(f)
+        
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds)
@@ -14,20 +24,10 @@ def get_client(json_data):
 st.set_page_config(page_title="WariDA", layout="wide")
 st.title("💸 WariDA Pro")
 
-# --- JSONアップロード処理 ---
-st.sidebar.header("⚙️ 設定")
-uploaded_file = st.sidebar.file_uploader("Googleサービスアカウントキー (JSON) をアップロード", type=["json"])
-
-if not uploaded_file:
-    st.warning("左側のメニューから service-account.json をアップロードしてください。")
-    st.stop()
-
 # --- データ読み込み ---
 @st.cache_data(ttl=5)
-def load_data(file_content):
-    # ファイルを一度読み込んでクライアントを作成
-    file_content.seek(0)
-    client = get_client(file_content)
+def load_data():
+    client = get_client()
     sheet = client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db")
     rows = sheet.get_all_values()
     if len(rows) > 1:
@@ -48,22 +48,20 @@ else:
     session = st.selectbox("会", ["1次会", "2次会", "3次会", "4次会", "5次会"])
     amount = st.number_input("金額", min_value=0, step=100)
     if st.button("送信"):
-        uploaded_file.seek(0)
-        client = get_client(uploaded_file)
+        client = get_client()
         client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db").append_row([session, st.session_state.my_name, amount])
         st.cache_data.clear()
         st.rerun()
 
 st.divider()
-df = load_data(uploaded_file)
+df = load_data()
 st.subheader("📋 履歴")
 st.dataframe(df, use_container_width=True)
 
 for i, row in df.iterrows():
     if row['支払者'] == st.session_state.my_name:
         if st.button(f"❌ 削除 ({row['会']} | {row['金額']}円)", key=f"del_{i}"):
-            uploaded_file.seek(0)
-            client = get_client(uploaded_file)
+            client = get_client()
             client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db").delete_rows(i + 2)
             st.cache_data.clear()
             st.rerun()
