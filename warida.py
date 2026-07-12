@@ -1,12 +1,21 @@
 import streamlit as st
 import gspread
-import json
 from oauth2client.service_account import ServiceAccountCredentials
 
-# 1. Googleスプレッドシートへの接続設定（Secretsを使用）
 def get_sheet():
-    # StreamlitのSecrets設定から JSON文字列を読み込み、辞書に変換
-    creds_dict = json.loads(st.secrets["gcp_service_account"])
+    # Secretsから個別に読み込む
+    creds_dict = {
+        "type": st.secrets["gcp"]["type"],
+        "project_id": st.secrets["gcp"]["project_id"],
+        "private_key_id": st.secrets["gcp"]["private_key_id"],
+        "private_key": st.secrets["gcp"]["private_key"],
+        "client_email": st.secrets["gcp"]["client_email"],
+        "client_id": st.secrets["gcp"]["client_id"],
+        "auth_uri": st.secrets["gcp"]["auth_uri"],
+        "token_uri": st.secrets["gcp"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["gcp"]["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["gcp"]["client_x509_cert_url"],
+    }
     
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -17,22 +26,19 @@ def get_sheet():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     
-    # ★あなたのスプレッドシートのIDをここにコピペしてください
+    # ★IDを直接指定
     spreadsheet_key = "あなたのスプレッドシートIDをここに貼り付け"
-    
     return client.open_by_key(spreadsheet_key).sheet1
 
-# アプリのタイトル
 st.title("💰 みんなの割り勘アプリ")
 
-# シートの取得
 try:
     sheet = get_sheet()
 except Exception as e:
-    st.error(f"接続エラーが発生しました: {e}")
+    st.error(f"接続エラー: {e}")
     st.stop()
 
-# 2. 入力フォーム
+# --- 以降は変更なし ---
 name = st.text_input("名前")
 amount = st.number_input("支払った金額", min_value=0)
 
@@ -43,23 +49,16 @@ if st.button("送信"):
     else:
         st.warning("名前を入力してください。")
 
-# 3. データの表示と計算
 if st.button("計算する"):
     data = sheet.get_all_records()
-    
     if not data:
         st.write("まだデータがありません。")
     else:
-        st.write("### 現在の入力状況")
         st.table(data)
-        
-        # 計算ロジック
         total = sum(d['金額'] for d in data)
         avg = total / len(data)
-        
         st.write(f"---")
         st.write(f"合計金額: {total}円 / 1人あたり: {avg:.0f}円")
-        
         for d in data:
             diff = d['金額'] - avg
             if diff < 0:
