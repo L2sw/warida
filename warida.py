@@ -4,8 +4,8 @@ import json
 from oauth2client.service_account import ServiceAccountCredentials
 
 def get_sheet():
-    # Secretsに保存したJSON文字列をロード
-    creds_dict = json.loads(st.secrets["gcp"]["key"])
+    # SecretsからJSON文字列を取得し、辞書に変換
+    creds_dict = json.loads(st.secrets["gcp"]["data"])
     
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -18,6 +18,8 @@ def get_sheet():
     
     spreadsheet_key = "1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw"
     sh = client.open_by_key(spreadsheet_key)
+    
+    # シート名が「warikan_db」であることを確認してください
     return sh.worksheet("warikan_db")
 
 st.title("💰 みんなの割り勘アプリ")
@@ -25,7 +27,7 @@ st.title("💰 みんなの割り勘アプリ")
 try:
     sheet = get_sheet()
 except Exception as e:
-    st.error(f"接続エラー詳細: {e}")
+    st.error(f"接続エラー: {e}")
     st.stop()
 
 name = st.text_input("名前")
