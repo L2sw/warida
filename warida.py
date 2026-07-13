@@ -25,54 +25,42 @@ def load_data():
     except Exception:
         return pd.DataFrame(columns=['会', '支払者', '金額'])
 
-# --- 現実的な清算ロジック ---
-def calculate_realistic_settlement(df):
-    all_results = []
-    # 全体の最終収支を管理
-    final_balance = {p: 0.0 for p in df['支払者'].unique()}
-
-    # 1. 各会ごとの処理（ローカル清算）
+# --- 厳密な清算ロジック ---
+def calculate_final_settlement(df):
+    # 各会ごとの収支を累積して全体収支を計算する
+    # 実際には「誰がいくら過不足があるか」が最終的に全て
+    balances = {}
+    
+    # 全参加者を抽出
+    all_participants = df['支払者'].unique()
+    for p in all_participants:
+        balances[p] = 0.0
+        
     for session in df['会'].unique():
         session_df = df[df['会'] == session]
         participants = session_df['支払者'].unique()
-        session_total = session_df['金額'].sum()
-        per_person = session_total / len(participants)
+        total = session_df['金額'].sum()
+        per_person = total / len(participants)
         
         actual = session_df.groupby('支払者')['金額'].sum()
-        session_bal = {p: actual.get(p, 0) - per_person for p in participants}
-        
-        # 債務者と債権者に分ける
-        debts = {p: -v for p, v in session_bal.items() if v < -0.1}
-        credits = {p: v for p, v in session_bal.items() if v > 0.1}
-        
-        # 同じ会にいたメンバー内での直接精算
-        for d_name, d_val in debts.items():
-            for c_name, c_val in credits.items():
-                if d_val > 0.1 and c_val > 0.1:
-                    pay = min(d_val, c_val)
-                    all_results.append({"支払人": d_name, "受取人": c_name, "金額": int(pay)})
-                    debts[d_name] -= pay
-                    credits[c_name] -= pay
-                    d_val -= pay
-        
-        # 会で精算しきれなかった分を全体の収支に加算
         for p in participants:
-            final_balance[p] = final_balance.get(p, 0) + session_bal.get(p, 0)
-
-    # 2. 全体での最終精算
-    final_debtors = {p: -v for p, v in final_balance.items() if v < -0.1}
-    final_credits = {p: v for p, v in final_balance.items() if v > 0.1}
+            balances[p] += (actual.get(p, 0) - per_person)
+            
+    # 債権者・債務者リスト作成
+    debtors = {p: -v for p, v in balances.items() if v < -0.1}
+    creditors = {p: v for p, v in balances.items() if v > 0.1}
     
-    for d_name, d_val in final_debtors.items():
-        for c_name, c_val in final_credits.items():
+    results = []
+    # 債務を債権に割り振る（マッチング）
+    for d_name, d_val in debtors.items():
+        for c_name, c_val in creditors.items():
             if d_val > 0.1 and c_val > 0.1:
                 pay = min(d_val, c_val)
-                all_results.append({"支払人": d_name, "受取人": c_name, "金額": int(pay)})
+                results.append({"支払人": d_name, "受取人": c_name, "金額": int(pay)})
                 d_val -= pay
-                c_val -= pay
-                final_credits[c_name] = c_val
+                creditors[c_name] -= pay
                 
-    return all_results
+    return pd.DataFrame(results) if results else pd.DataFrame(columns=["支払人", "受取人", "金額"])
 
 # --- UI ---
 st.set_page_config(page_title="WariDA Pro", layout="wide")
@@ -94,11 +82,13 @@ else:
         st.rerun()
 
 st.divider()
-df = load_data()
 
-# 各会ごとの集計表示
-tabs = st.tabs(["1次会", "2次会", "3次会", "4次会", "5次会"])
-for i, s_name in enumerate(["1次会", "2次会", "3次会", "4次会", "5次会"]):
+# 1. 会ごとの内訳表示（削除機能付き）
+df = load_data()
+sessions = ["1次会", "2次会", "3次会", "4次会", "5次会"]
+tabs = st.tabs(sessions)
+
+for i, s_name in enumerate(sessions):
     with tabs[i]:
         session_df = df[df['会'] == s_name]
         if not session_df.empty:
@@ -108,11 +98,11 @@ for i, s_name in enumerate(["1次会", "2次会", "3次会", "4次会", "5次会
                 col1.write(row['支払者'])
                 col2.write(f"{int(row['金額'])} 円")
                 if row['支払者'] == st.session_state.my_name:
-                    if col3.button("❌", key=f"del_{s_name}"):
+                    if col3.button("❌", key=f"del_{s_name}_{row['支払者']}"):
                         client = get_client()
                         sheet = client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db")
                         all_rows = sheet.get_all_values()
-                        new_rows = [r for r in all_rows if not (r[0] == s_name and r[1] == st.session_state.my_name)]
+                        new_rows = [r for r in all_rows if not (r[0] == s_name and r[1] == row['支払者'])]
                         sheet.clear()
                         sheet.update(all_rows[0:1] + new_rows)
                         st.cache_data.clear()
@@ -120,13 +110,14 @@ for i, s_name in enumerate(["1次会", "2次会", "3次会", "4次会", "5次会
         else:
             st.info("データなし")
 
+# 2. 最終清算結果（完全集計版）
 st.divider()
 st.subheader("💰 最終的な支払い指示書")
-settlements = calculate_realistic_settlement(df)
-if settlements:
-    # 支払人・受取人が同じ場合の合算処理
-    res_df = pd.DataFrame(settlements)
-    res_df = res_df.groupby(['支払人', '受取人'])['金額'].sum().reset_index()
-    st.table(res_df)
+res_df = calculate_final_settlement(df)
+
+if not res_df.empty:
+    # ここで完全に支払人・受取人をグループ化して合計する
+    final_view = res_df.groupby(['支払人', '受取人'])['金額'].sum().reset_index()
+    st.table(final_view)
 else:
     st.success("清算不要です")
