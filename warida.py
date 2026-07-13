@@ -25,17 +25,13 @@ def load_data():
     except Exception:
         return pd.DataFrame(columns=['会', '支払者', '金額'])
 
-# --- 最適化された清算ロジック ---
-def calculate_global_settlement(df):
-    if df.empty: return []
-    
-    # 全員のトータル収支
-    global_balances = {}
-    # 全参加者のセット
-    all_participants = set(df['支払者'].unique())
-    for p in all_participants: global_balances[p] = 0.0
-    
-    # 会ごとに収支を計算
+# --- 現実的な清算ロジック ---
+def calculate_realistic_settlement(df):
+    all_results = []
+    # 最終的な個人の収支（実績 - 負担額の合計）
+    final_balance = {}
+
+    # 1. 各会ごとの処理
     for session in df['会'].unique():
         session_df = df[df['会'] == session]
         participants = session_df['支払者'].unique()
@@ -43,26 +39,44 @@ def calculate_global_settlement(df):
         per_person = session_total / len(participants)
         
         actual = session_df.groupby('支払者')['金額'].sum()
+        
+        # 会ごとの収支を計算
+        session_bal = {p: actual.get(p, 0) - per_person for p in participants}
+        
+        # 債務者と債権者に分ける
+        debts = {p: -v for p, v in session_bal.items() if v < -0.1}
+        credits = {p: v for p, v in session_bal.items() if v > 0.1}
+        
+        # 同じ会にいたメンバー内での直接精算
+        for d_name, d_val in debts.items():
+            for c_name, c_val in credits.items():
+                if d_val > 0.1 and c_val > 0.1:
+                    pay = min(d_val, c_val)
+                    all_results.append({"支払人": d_name, "受取人": c_name, "金額": int(pay)})
+                    debts[d_name] -= pay
+                    credits[c_name] -= pay
+                    d_val -= pay
+        
+        # 会で精算しきれなかった分を全体の収支に加算
         for p in participants:
-            global_balances[p] += (actual.get(p, 0) - per_person)
-            
-    # 清算（Debt -> Creditへの直接送金計算）
-    balances = pd.Series(global_balances)
-    debtors = balances[balances < -0.5].sort_values()
-    creditors = balances[balances > 0.5].sort_values(ascending=False)
-    
-    results = []
-    for d_name, d_val in debtors.items():
-        rem_debt = -d_val
-        for c_name, c_val in creditors.items():
-            if c_val <= 0 or rem_debt <= 0: continue
-            pay = min(rem_debt, c_val)
-            results.append({"支払人": d_name, "受取人": c_name, "金額": int(pay)})
-            creditors[c_name] -= pay
-            rem_debt -= pay
-    return results
+            final_balance[p] = final_balance.get(p, 0) + session_bal.get(p, 0)
 
-# --- UI設定 ---
+    # 2. 全体での最終精算
+    final_debtors = {p: -v for p, v in final_balance.items() if v < -0.1}
+    final_credits = {p: v for p, v in final_balance.items() if v > 0.1}
+    
+    for d_name, d_val in final_debtors.items():
+        for c_name, c_val in final_credits.items():
+            if d_val > 0.1 and c_val > 0.1:
+                pay = min(d_val, c_val)
+                all_results.append({"支払人": d_name, "受取人": c_name, "金額": int(pay)})
+                d_val -= pay
+                c_val -= pay
+                final_credits[c_name] = c_val
+                
+    return all_results
+
+# --- UI ---
 st.set_page_config(page_title="WariDA Pro", layout="wide")
 st.title("💸 WariDA Pro")
 
@@ -82,14 +96,11 @@ else:
         st.rerun()
 
 st.divider()
-
-# 1. 会ごとの内訳と削除
-st.subheader("📋 会ごとの支払い内訳")
 df = load_data()
-sessions = ["1次会", "2次会", "3次会", "4次会", "5次会"]
-tabs = st.tabs(sessions)
 
-for i, s_name in enumerate(sessions):
+# 各会ごとの集計表示
+tabs = st.tabs(["1次会", "2次会", "3次会", "4次会", "5次会"])
+for i, s_name in enumerate(["1次会", "2次会", "3次会", "4次会", "5次会"]):
     with tabs[i]:
         session_df = df[df['会'] == s_name]
         if not session_df.empty:
@@ -108,14 +119,14 @@ for i, s_name in enumerate(sessions):
                         sheet.update(all_rows[0:1] + new_rows)
                         st.cache_data.clear()
                         st.rerun()
-        else:
-            st.info("データなし")
 
-# 2. 最終清算結果
 st.divider()
 st.subheader("💰 最終的な支払い指示書")
-settlements = calculate_global_settlement(df)
+settlements = calculate_realistic_settlement(df)
 if settlements:
-    st.table(pd.DataFrame(settlements))
+    # 同一ペアの金額を合算
+    res_df = pd.DataFrame(settlements)
+    res_df = res_df.groupby(['支払人', '受取人'])['金額'].sum().reset_index()
+    st.table(res_df)
 else:
-    st.success("清算不要")
+    st.success("清算不要です")
