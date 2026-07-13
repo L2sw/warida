@@ -28,10 +28,10 @@ def load_data():
 # --- 現実的な清算ロジック ---
 def calculate_realistic_settlement(df):
     all_results = []
-    # 最終的な個人の収支（実績 - 負担額の合計）
-    final_balance = {}
+    # 全体の最終収支を管理
+    final_balance = {p: 0.0 for p in df['支払者'].unique()}
 
-    # 1. 各会ごとの処理
+    # 1. 各会ごとの処理（ローカル清算）
     for session in df['会'].unique():
         session_df = df[df['会'] == session]
         participants = session_df['支払者'].unique()
@@ -39,8 +39,6 @@ def calculate_realistic_settlement(df):
         per_person = session_total / len(participants)
         
         actual = session_df.groupby('支払者')['金額'].sum()
-        
-        # 会ごとの収支を計算
         session_bal = {p: actual.get(p, 0) - per_person for p in participants}
         
         # 債務者と債権者に分ける
@@ -119,12 +117,14 @@ for i, s_name in enumerate(["1次会", "2次会", "3次会", "4次会", "5次会
                         sheet.update(all_rows[0:1] + new_rows)
                         st.cache_data.clear()
                         st.rerun()
+        else:
+            st.info("データなし")
 
 st.divider()
 st.subheader("💰 最終的な支払い指示書")
 settlements = calculate_realistic_settlement(df)
 if settlements:
-    # 同一ペアの金額を合算
+    # 支払人・受取人が同じ場合の合算処理
     res_df = pd.DataFrame(settlements)
     res_df = res_df.groupby(['支払人', '受取人'])['金額'].sum().reset_index()
     st.table(res_df)
