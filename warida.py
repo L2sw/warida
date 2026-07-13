@@ -1,31 +1,20 @@
 import streamlit as st
 import gspread
 import pandas as pd
-from datetime import datetime
 from google.oauth2.service_account import Credentials
 
 # --- 設定 ---
 st.set_page_config(page_title="WariDA Pro", layout="wide")
 
-# --- CSS定義（スマホでも横並びを維持する最強のグリッド） ---
+# --- CSS定義 ---
 st.markdown("""
 <style>
-    .compact-table {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-        gap: 5px;
-        margin-bottom: 10px;
-    }
-    .compact-item {
-        background-color: #262730;
-        padding: 8px;
-        border-radius: 5px;
-        text-align: center;
-        border: 1px solid #444;
-    }
+    .compact-table { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 5px; margin-bottom: 10px; }
+    .compact-item { background-color: #262730; padding: 8px; border-radius: 5px; text-align: center; border: 1px solid #444; }
 </style>
 """, unsafe_allow_html=True)
 
+# --- 関数 ---
 @st.cache_resource
 def get_gspread_client():
     creds_dict = dict(st.secrets["gcp_service_account"])
@@ -43,7 +32,7 @@ def get_data():
         df = pd.DataFrame(rows[1:], columns=['会', '支払者', '金額'])
         df['金額'] = pd.to_numeric(df['金額'], errors='coerce').fillna(0)
         return df
-    except:
+    except Exception:
         return pd.DataFrame(columns=['会', '支払者', '金額'])
 
 def calculate_settlements(df):
@@ -72,14 +61,31 @@ def calculate_settlements(df):
 # --- UI ---
 st.title("💸 WariDA Pro")
 
-if st.button("🔄 更新"):
-    st.cache_data.clear()
-    st.rerun()
-
+# 名前入力と確定処理を切り分ける
 if 'my_name' not in st.session_state: st.session_state.my_name = ""
-st.session_state.my_name = st.text_input("名前", st.session_state.my_name)
+if 'is_logged_in' not in st.session_state: st.session_state.is_logged_in = False
 
-if st.session_state.my_name:
+if not st.session_state.is_logged_in:
+    name_input = st.text_input("あなたの名前を入力してください")
+    if st.button("ログイン"):
+        if name_input:
+            st.session_state.my_name = name_input
+            st.session_state.is_logged_in = True
+            st.rerun()
+        else:
+            st.error("名前を入力してください")
+else:
+    st.write(f"ログイン中: **{st.session_state.my_name}**")
+    if st.button("ログアウト（名前変更）"):
+        st.session_state.is_logged_in = False
+        st.rerun()
+
+    # 更新ボタン
+    if st.button("🔄 更新"):
+        st.cache_data.clear()
+        st.rerun()
+
+    # 送信
     col1, col2, col3 = st.columns([2, 1, 1])
     session = col1.selectbox("会", ["1次会", "2次会", "3次会", "4次会", "5次会"])
     amount = col2.number_input("金額", min_value=0, step=100)
@@ -103,7 +109,6 @@ if st.session_state.my_name:
     for i, s_name in enumerate(["1次会", "2次会", "3次会", "4次会", "5次会"]):
         with tabs[i]:
             s_df = df[df['会'] == s_name]
-            # 強制グリッド表示
             st.markdown('<div class="compact-table">', unsafe_allow_html=True)
             for idx, row in s_df.iterrows():
                 st.markdown(f'''
@@ -113,9 +118,8 @@ if st.session_state.my_name:
                 ''', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
             
-            # 自分のみ削除ボタン表示
             if not s_df[s_df['支払者'] == st.session_state.my_name].empty:
-                if st.button(f"自分のデータを消去 ({s_name})", key=f"del_{i}"):
+                if st.button(f"自分の履歴を消去 ({s_name})", key=f"del_{i}"):
                     all_rows = get_sheet().get_all_values()
                     new_rows = [r for r in all_rows[1:] if not (r[0] == s_name and r[1] == st.session_state.my_name)]
                     get_sheet().batch_clear(["A2:C1000"])
@@ -130,5 +134,3 @@ if st.session_state.my_name:
     if st.button("⚠️ 全データ削除"):
         get_sheet().batch_clear(["A2:C1000"])
         st.rerun()
-else:
-    st.warning("名前を入力してください")
