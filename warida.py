@@ -7,6 +7,25 @@ from google.oauth2.service_account import Credentials
 # --- 設定 ---
 st.set_page_config(page_title="WariDA Pro", layout="wide")
 
+# --- CSS定義（タイル状表示用） ---
+st.markdown("""
+<style>
+    .grid-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+    }
+    .grid-item {
+        border: 1px solid #444;
+        border-radius: 8px;
+        padding: 10px;
+        text-align: center;
+        background-color: #1a1a1a;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 @st.cache_resource
 def get_gspread_client():
     creds_dict = dict(st.secrets["gcp_service_account"])
@@ -61,7 +80,6 @@ if 'my_name' not in st.session_state: st.session_state.my_name = ""
 st.session_state.my_name = st.text_input("名前", st.session_state.my_name)
 
 if st.session_state.my_name:
-    # 送信
     col1, col2, col3 = st.columns([2, 1, 1])
     session = col1.selectbox("会", ["1次会", "2次会", "3次会", "4次会", "5次会"])
     amount = col2.number_input("金額", min_value=0, step=100)
@@ -81,25 +99,30 @@ if st.session_state.my_name:
     st.divider()
     df = get_data()
     
-    # コンパクトなタイル表示（3列で折り返し）
     tabs = st.tabs(["1次会", "2次会", "3次会", "4次会", "5次会"])
     for i, s_name in enumerate(["1次会", "2次会", "3次会", "4次会", "5次会"]):
         with tabs[i]:
             s_df = df[df['会'] == s_name]
-            # 3列グリッドで表示
-            cols_grid = st.columns(3)
-            for idx, (index, row) in enumerate(s_df.iterrows()):
-                c = cols_grid[idx % 3]
-                with c.container(border=True):
-                    st.caption(f"👤 {row['支払者']}")
-                    st.write(f"**¥{int(row['金額'])}**")
-                    if row['支払者'] == st.session_state.my_name:
-                        if st.button("❌", key=f"del_{i}_{idx}"):
-                            all_rows = get_sheet().get_all_values()
-                            new_rows = [r for r in all_rows[1:] if not (r[0] == s_name and r[1] == row['支払者'])]
-                            get_sheet().batch_clear(["A2:C1000"])
-                            if new_rows: get_sheet().append_rows(new_rows)
-                            st.rerun()
+            # ここからCSSによるタイル表示
+            st.markdown('<div class="grid-container">', unsafe_allow_html=True)
+            for idx, row in s_df.iterrows():
+                # HTMLでカードを作成
+                st.markdown(f'''
+                <div class="grid-item">
+                    <small>{row['支払者']}</small><br>
+                    <strong>¥{int(row['金額'])}</strong>
+                </div>
+                ''', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # 削除ボタンは別の行に配置して誤操作を防ぐ
+            if not s_df[s_df['支払者'] == st.session_state.my_name].empty:
+                if st.button(f"{st.session_state.my_name} さんの履歴を消去", key=f"del_{i}"):
+                    all_rows = get_sheet().get_all_values()
+                    new_rows = [r for r in all_rows[1:] if not (r[0] == s_name and r[1] == st.session_state.my_name)]
+                    get_sheet().batch_clear(["A2:C1000"])
+                    if new_rows: get_sheet().append_rows(new_rows)
+                    st.rerun()
 
     st.divider()
     st.subheader("💰 最終清算")
