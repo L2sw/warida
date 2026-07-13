@@ -7,21 +7,21 @@ from google.oauth2.service_account import Credentials
 # --- 設定 ---
 st.set_page_config(page_title="WariDA Pro", layout="wide")
 
-# --- CSS定義（タイル状表示用） ---
+# --- CSS定義（スマホでも横並びを維持する最強のグリッド） ---
 st.markdown("""
 <style>
-    .grid-container {
+    .compact-table {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-        gap: 10px;
-        margin-top: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 5px;
+        margin-bottom: 10px;
     }
-    .grid-item {
-        border: 1px solid #444;
-        border-radius: 8px;
-        padding: 10px;
+    .compact-item {
+        background-color: #262730;
+        padding: 8px;
+        border-radius: 5px;
         text-align: center;
-        background-color: #1a1a1a;
+        border: 1px solid #444;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -103,21 +103,19 @@ if st.session_state.my_name:
     for i, s_name in enumerate(["1次会", "2次会", "3次会", "4次会", "5次会"]):
         with tabs[i]:
             s_df = df[df['会'] == s_name]
-            # ここからCSSによるタイル表示
-            st.markdown('<div class="grid-container">', unsafe_allow_html=True)
+            # 強制グリッド表示
+            st.markdown('<div class="compact-table">', unsafe_allow_html=True)
             for idx, row in s_df.iterrows():
-                # HTMLでカードを作成
                 st.markdown(f'''
-                <div class="grid-item">
-                    <small>{row['支払者']}</small><br>
-                    <strong>¥{int(row['金額'])}</strong>
+                <div class="compact-item">
+                    {row['支払者']}<br><strong>¥{int(row['金額'])}</strong>
                 </div>
                 ''', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
             
-            # 削除ボタンは別の行に配置して誤操作を防ぐ
+            # 自分のみ削除ボタン表示
             if not s_df[s_df['支払者'] == st.session_state.my_name].empty:
-                if st.button(f"{st.session_state.my_name} さんの履歴を消去", key=f"del_{i}"):
+                if st.button(f"自分のデータを消去 ({s_name})", key=f"del_{i}"):
                     all_rows = get_sheet().get_all_values()
                     new_rows = [r for r in all_rows[1:] if not (r[0] == s_name and r[1] == st.session_state.my_name)]
                     get_sheet().batch_clear(["A2:C1000"])
