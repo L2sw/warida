@@ -17,12 +17,6 @@ def get_gspread_client():
 def get_sheet():
     return get_gspread_client().open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db")
 
-def get_log_sheet():
-    try:
-        return get_gspread_client().open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("log_db")
-    except:
-        return None
-
 def get_data():
     try:
         rows = get_sheet().get_all_values()
@@ -60,58 +54,62 @@ def calculate_settlements(df):
 # --- UI ---
 st.title("💸 WariDA Pro")
 
-# 更新ボタン
 if st.button("🔄 最新データに更新"):
     st.cache_data.clear()
     st.rerun()
 
-# ユーザー名
 if 'my_name' not in st.session_state: st.session_state.my_name = ""
 st.session_state.my_name = st.text_input("あなたの名前", st.session_state.my_name)
 
 if st.session_state.my_name:
-    # 送信
-    c1, c2, c3 = st.columns([2, 1, 1])
-    session = c1.selectbox("会", ["1次会", "2次会", "3次会", "4次会", "5次会"])
-    amount = c2.number_input("金額", min_value=0, step=100)
-    if c3.button("送信"):
-        get_sheet().append_row([session, st.session_state.my_name, amount])
+    # 送信（加算方式：既に同じ人がいる場合は合計する）
+    col1, col2, col3 = st.columns([2, 1, 1])
+    session = col1.selectbox("会", ["1次会", "2次会", "3次会", "4次会", "5次会"])
+    amount = col2.number_input("金額", min_value=0, step=100)
+    if col3.button("送信（加算）"):
+        df = get_data()
+        mask = (df['会'] == session) & (df['支払者'] == st.session_state.my_name)
+        if mask.any():
+            # 既存データがあれば更新
+            new_amount = df.loc[mask, '金額'].iloc[0] + amount
+            all_rows = get_sheet().get_all_values()
+            for r_idx, r in enumerate(all_rows[1:], 2):
+                if r[0] == session and r[1] == st.session_state.my_name:
+                    get_sheet().update_cell(r_idx, 3, new_amount)
+                    break
+        else:
+            # 新規追加
+            get_sheet().append_row([session, st.session_state.my_name, amount])
         st.rerun()
 
     st.divider()
     df = get_data()
     
-    # コンパクトな履歴表示
+    # コンパクト表示：会ごとに合計行だけを表示
     tabs = st.tabs(["1次会", "2次会", "3次会", "4次会", "5次会"])
     for i, s_name in enumerate(["1次会", "2次会", "3次会", "4次会", "5次会"]):
         with tabs[i]:
             s_df = df[df['会'] == s_name]
             for idx, row in s_df.iterrows():
-                # コンパクト表示
-                col_a, col_b, col_c = st.columns([3, 1, 1])
-                col_a.write(f"👤 {row['支払者']}")
-                col_b.write(f"¥{int(row['金額'])}")
-                # 削除権限チェック：自分の行にのみボタンを表示
+                # 完全に合計のみを表示するため、行を分けない
+                c_a, c_b, c_c = st.columns([3, 1, 1])
+                c_a.write(f"👤 {row['支払者']}")
+                c_b.write(f"¥{int(row['金額'])}")
                 if row['支払者'] == st.session_state.my_name:
-                    if col_c.button("❌", key=f"del_{i}_{idx}"):
+                    if c_c.button("❌", key=f"del_{i}_{idx}"):
                         all_rows = get_sheet().get_all_values()
-                        target = [row['会'], row['支払者'], str(int(row['金額']))]
-                        for r_idx, r in enumerate(all_rows[1:], 2):
-                            if r == target:
-                                get_sheet().delete_rows(r_idx)
-                                break
+                        new_rows = [r for r in all_rows[1:] if not (r[0] == s_name and r[1] == row['支払者'])]
+                        get_sheet().batch_clear(["A2:C1000"])
+                        if new_rows: get_sheet().append_rows(new_rows)
                         st.rerun()
 
     st.divider()
     st.subheader("💰 最終清算")
     st.table(calculate_settlements(df))
 
-    # 管理メニュー
     st.markdown("---")
     st.markdown("### 🛠 管理メニュー")
     if st.button("すべてのデータを削除する"):
-        l_sheet = get_log_sheet()
-        if l_sheet: l_sheet.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), st.session_state.my_name, "全データ削除"])
         get_sheet().batch_clear(["A2:C1000"])
         st.rerun()
 else:
