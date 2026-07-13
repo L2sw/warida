@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 # --- 設定 ---
 st.set_page_config(page_title="WariDA Pro", layout="wide")
 
-# --- 接続管理 (高速化) ---
+# --- 接続管理 ---
 @st.cache_resource
 def get_gspread_client():
     creds_dict = dict(st.secrets["gcp_service_account"])
@@ -16,12 +16,10 @@ def get_gspread_client():
     return gspread.authorize(creds)
 
 def get_sheet():
-    client = get_gspread_client()
-    return client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db")
+    return get_gspread_client().open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("warikan_db")
 
 def get_log_sheet():
-    client = get_gspread_client()
-    return client.open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("log_db")
+    return get_gspread_client().open_by_key("1FMOcjANKIfUgtzfBNCRgk1MAi-QxrvZb-yA_xiOy_Hw").worksheet("log_db")
 
 # --- データ読み込み ---
 def get_data():
@@ -62,46 +60,54 @@ def calculate_settlements(df):
 # --- UI ---
 st.title("💸 WariDA Pro")
 
-# ユーザー管理
+# ユーザー名入力
 if 'my_name' not in st.session_state: st.session_state.my_name = ""
 st.session_state.my_name = st.text_input("あなたの名前（必須）", st.session_state.my_name)
 
 if st.session_state.my_name:
-    # 送信
-    session = st.selectbox("会", ["1次会", "2次会", "3次会", "4次会", "5次会"])
-    amount = st.number_input("金額", min_value=0, step=100)
-    if st.button("送信"):
-        get_sheet().append_row([session, st.session_state.my_name, amount])
-        st.rerun()
-
-    # 全削除
-    with st.expander("⚠️ 管理者メニュー：全データ削除"):
-        if st.button("すべてのデータを削除する"):
-            get_log_sheet().append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), st.session_state.my_name, "全データ削除"])
-            get_sheet().batch_clear(["A2:C1000"])
+    # 送信エリア
+    with st.container():
+        session = st.selectbox("会", ["1次会", "2次会", "3次会", "4次会", "5次会"])
+        amount = st.number_input("金額", min_value=0, step=100)
+        if st.button("送信"):
+            get_sheet().append_row([session, st.session_state.my_name, amount])
             st.rerun()
 
     st.divider()
-    df = get_data()
     
-    # 内訳表示
+    # データ表示エリア
+    df = get_data()
     tabs = st.tabs(["1次会", "2次会", "3次会", "4次会", "5次会"])
     for i, s_name in enumerate(["1次会", "2次会", "3次会", "4次会", "5次会"]):
         with tabs[i]:
             s_df = df[df['会'] == s_name]
-            for _, row in s_df.iterrows():
+            for idx, row in s_df.iterrows():
                 cols = st.columns([2, 2, 1])
                 cols[0].write(row['支払者'])
                 cols[1].write(f"{int(row['金額'])} 円")
                 if row['支払者'] == st.session_state.my_name:
-                    if cols[2].button("❌", key=f"del_{i}_{_}"):
+                    if cols[2].button("❌", key=f"del_{i}_{idx}"):
                         all_rows = get_sheet().get_all_values()
-                        new_rows = [r for r in all_rows[1:] if not (r[0] == s_name and r[1] == row['支払者'] and int(r[2]) == row['金額'])]
-                        get_sheet().update('A2:C1000', [[None]*3]*len(all_rows)) # クリア
-                        if new_rows: get_sheet().update('A2:C'+str(len(new_rows)+1), new_rows)
+                        target = [row['会'], row['支払者'], str(int(row['金額']))]
+                        # 一致する行を削除（最初の1件のみ）
+                        for r_idx, r in enumerate(all_rows[1:], 2):
+                            if r == target:
+                                get_sheet().delete_rows(r_idx)
+                                break
                         st.rerun()
 
+    # 最終清算表示
     st.subheader("💰 最終清算")
     st.table(calculate_settlements(df))
+
+    # --- ページ最下部：管理者メニュー ---
+    st.divider()
+    st.markdown("### 🛠 管理メニュー")
+    if st.button("すべてのデータを削除する"):
+        get_log_sheet().append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), st.session_state.my_name, "全データ削除"])
+        get_sheet().batch_clear(["A2:C1000"])
+        st.success("全データを削除しました")
+        st.rerun()
+
 else:
     st.warning("名前を入力してください")
