@@ -27,11 +27,7 @@ def load_data():
 
 # --- 厳密な清算ロジック ---
 def calculate_final_settlement(df):
-    # 各会ごとの収支を累積して全体収支を計算する
-    # 実際には「誰がいくら過不足があるか」が最終的に全て
     balances = {}
-    
-    # 全参加者を抽出
     all_participants = df['支払者'].unique()
     for p in all_participants:
         balances[p] = 0.0
@@ -46,12 +42,10 @@ def calculate_final_settlement(df):
         for p in participants:
             balances[p] += (actual.get(p, 0) - per_person)
             
-    # 債権者・債務者リスト作成
     debtors = {p: -v for p, v in balances.items() if v < -0.1}
     creditors = {p: v for p, v in balances.items() if v > 0.1}
     
     results = []
-    # 債務を債権に割り振る（マッチング）
     for d_name, d_val in debtors.items():
         for c_name, c_val in creditors.items():
             if d_val > 0.1 and c_val > 0.1:
@@ -65,6 +59,11 @@ def calculate_final_settlement(df):
 # --- UI ---
 st.set_page_config(page_title="WariDA Pro", layout="wide")
 st.title("💸 WariDA Pro")
+
+# 更新ボタンの処理
+if st.button("🔄 ページを更新して最新にする"):
+    st.cache_data.clear()
+    st.rerun()
 
 if 'my_name' not in st.session_state: st.session_state.my_name = None
 
@@ -83,7 +82,7 @@ else:
 
 st.divider()
 
-# 1. 会ごとの内訳表示（削除機能付き）
+# 会ごとの内訳と削除
 df = load_data()
 sessions = ["1次会", "2次会", "3次会", "4次会", "5次会"]
 tabs = st.tabs(sessions)
@@ -110,13 +109,12 @@ for i, s_name in enumerate(sessions):
         else:
             st.info("データなし")
 
-# 2. 最終清算結果（完全集計版）
+# 最終清算結果
 st.divider()
 st.subheader("💰 最終的な支払い指示書")
 res_df = calculate_final_settlement(df)
 
 if not res_df.empty:
-    # ここで完全に支払人・受取人をグループ化して合計する
     final_view = res_df.groupby(['支払人', '受取人'])['金額'].sum().reset_index()
     st.table(final_view)
 else:
